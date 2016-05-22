@@ -13,8 +13,7 @@
 #           4.concatenate RGB arrays 
 #           5.save individual R,G,B arrays and/or concatenated RGB array to file
 #           in .coe format with header included
-#           ***FOR SUCCESFUL .coe loading to VIVADO memory block: edit out unecessary comment symbols (#)
-#           in .coe file
+#          
 ######################################################################################################################
 #   USAGE:
 #           1.line # 178,221 : change the hardcoded path to the names of your own system and sub directory 
@@ -175,7 +174,10 @@ def saveToFile(array,message):
               R, G, B, or Concatenated file
               Returns: nothing
     '''
-    savePath = 'C:/Users/rstas_000/Documents/540/540_Final Project DESIGN/'  #inout/image file path
+    savePath = 'C:/Users/Dakota/Desktop/TIF_icon/COE/'  #inout/image file path
+    header_string ="MEMORY_INITIALIZATION_RADIX=16;\nMEMORY_INITIALIZATION_VECTOR=\n" #header for .coe file
+    footer_string = ';'
+
     #user prompt
     if message == 1:
         save_file = input("What is the name of your Red channel output file?")
@@ -183,18 +185,24 @@ def saveToFile(array,message):
         save_file = input("What is the name of your Green channel output file?")
     elif message == 3:
         save_file = input("What is the name of your Blue channel output file?")
-    else:
-       save_file = input("What is the name of your Concatenated RGB output file?")
-        
+    elif message == 4:
+        save_file = input("What is the name of your Concatenated RGB output file?")
+        save_file_path = os.path.join(savePath, save_file) 
+        with open(save_file_path,'w') as f:
+            f.write(header_string)
+            f.write(",".join(array))
+            f.write(footer_string)
+            f.close()
+            sys.exit()
+
     save_file_path = os.path.join(savePath, save_file) 
-    header_string ="MEMORY_INITIALIZATION_RADIX=16;\nMEMORY_INITIALIZATION_VECTOR=\n" #header for .coe file
-    footer_string = ';'
     with open(save_file_path,'w') as f:
         f.write(header_string)
-        array.tofile(f,sep=" ", format ="%X")
+        array.tofile(f,sep=",", format ="%x")
         f.write(footer_string)
         f.close()
-       # np.savetxt(f,array,delimiter=' ',newline=' ',fmt='%i', #format in hexadecimal
+       
+        # np.savetxt(f,array,delimiter=' ',newline=' ',fmt='%i', #format in hexadecimal
        #               header=header_string,footer=footer_string) #header created, footer appended
 
         
@@ -214,10 +222,14 @@ def save_options(r_array,g_array,b_array):
         pass
     save_concat = input ("Would you like to concatenate the RGB data to one .coe file?\nEnter [y]es ot [n]: ")
     if save_concat == 'y':
-        #concate_array = np.concatenate((r_array,g_array,b_array), axis=1)
-        #concate_array = (np.dstack((r_array,g_array,b_array)) *255.999).astype(np.uint8)
+
         concate_array = np.dstack((r_array,g_array,b_array)) 
-        saveToFile(concate_array,4)
+        new_concat_list = [' '.join([hex(ele) for ele in row]) for dim in concate_array for row in dim]
+        number_of_elements = len(new_concat_list)
+        for i in range(0,number_of_elements):
+            new_concat_list[i] = new_concat_list[i].replace(' ', '').replace('0x', '')
+        
+        saveToFile(new_concat_list,4)
     else:
         print("Closing program.....")
         sys.exit()
@@ -225,7 +237,7 @@ def save_options(r_array,g_array,b_array):
 
 def main():
     
-    imgPath = 'C:/Users/rstas_000/Documents/540/540_Final Project DESIGN/'  #image file path CHANGE AS NEEDED 
+    imgPath = 'C:/Users/Dakota/Desktop/TIF_icon/TIFS/'  #image file path CHANGE AS NEEDED 
     
     #user prompt
     image_file = input("What is the name of your TIF file?")
