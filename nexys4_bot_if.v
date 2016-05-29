@@ -38,6 +38,17 @@ input [7:0] io_data_in,		// data from PicoBlaze to be written to
 output reg[7:0] io_data_out,// data from I/O register to PicoBlaze
 input interrupt_ack,		// interrupt acknowledge from PicoBlaze
 output reg interrupt,		// interrupt request to PicoBlaze
+input write_strobe_mon,			// Write strobe –assertto write I/O 
+// data
+read_strobe_mon,				// Read strobe -asserted to read I/O 
+// data
+input [7:0] port_id_mon,		// I/O port address
+input [7:0] io_data_in_mon,		// data from PicoBlaze to be written to 
+// I/O register
+output reg[7:0] io_data_out_mon,// data from I/O register to PicoBlaze
+input interrupt_ack_mon,		// interrupt acknowledge from PicoBlaze
+output reg interrupt_mon,		// interrupt request to PicoBlaze
+
 // interface to the Nexys4
 input sysclk,				// system clock
 input sysreset,				// system reset (asserted high)
@@ -53,6 +64,12 @@ input[7:0]PORT_0A, 			//		; (i) X coordinate of rojobot location
 input[7:0]PORT_0B, 			//		; (i) Y coordinate of rojobot location
 input[7:0]PORT_0C, 			//		; (i) Rojobot info register
 input[7:0]PORT_0D, 			//		; (i) Sensor register
+/////// monster
+output reg[7:0]PORT_19,		//		; (o) Rojobot motor control output from system
+input[7:0]PORT_1A, 			//		; (i) X coordinate of rojobot location
+input[7:0]PORT_1B, 			//		; (i) Y coordinate of rojobot location
+input[7:0]PORT_1C, 			//		; (i) Rojobot info register
+input[7:0]PORT_1D, 			//		; (i) Sensor register
 input[7:0]PORT_0E, 			//		; (i) Y coor uppper bits
 
 output reg[7:0]PORT_02,		// LEDS [7:0]
@@ -70,7 +87,8 @@ output reg[7:0]PORT_16,		// (o) digit 4 port address
 output reg[7:0]PORT_17,		// (o) decimal points 7:4 port address
 output reg[7:0]PORT_18,		// (o) *RESERVED* alternate port address
 
-input interrupt_request		// Interrupt request input
+input interrupt_request,		// Interrupt request input
+input interrupt_request_mon
 );
 
 
@@ -95,15 +113,39 @@ wire reset_in = RESET_POLARITY_LOW ? ~sysreset : sysreset;
 //// Note:  The input registers are binary encoded per kcpsm6_design_template.v
 //
 always @ (posedge sysclk) begin
-case (port_id[3:0]) 
+case (port_id[4:0]) 
 
-4'b0000 : io_data_out <= PORT_00; 	// pushbutton
-4'b1010 : io_data_out <= PORT_0A;	// x loc
-4'b1011 : io_data_out <= PORT_0B;	// y loc
-4'b1100 : io_data_out <= PORT_0C;	// rojobot info
-4'b1101 : io_data_out <= PORT_0D;	// sensor
-4'b1110 : io_data_out <= PORT_0E;	// y upper
+5'b00000 : io_data_out <= PORT_00; 	// pushbutton
+5'b00001 : io_data_out <= PORT_01;	// switches
+5'b10000 : io_data_out <= PORT_10;
+5'b01010 : io_data_out <= PORT_0A;	// x loc
+5'b01011 : io_data_out <= PORT_0B;	// y loc
+5'b01100 : io_data_out <= PORT_0C;	// rojobot info
+5'b01101 : io_data_out <= PORT_0D;	// sensor
+//5'b01010 : io_data_out <= PORT_1A;	// x loc mon
+//5'b01011 : io_data_out <= PORT_1B;	// y loc mon
+//5'b01100 : io_data_out <= PORT_1C;	// rojobot info mon
+//5'b01101 : io_data_out <= PORT_1D;	// sensor mon
+//5'b01110 : io_data_out <= PORT_0E;	// y upper
 default : io_data_out <= 8'bXXXXXXXX ;  
+endcase
+end
+always @ (posedge sysclk) begin
+case (port_id_mon[4:0]) 
+
+//5'b00000 : io_data_out_mon <= PORT_00; 	// pushbutton
+//5'b00001 : io_data_out_mon <= PORT_01;	// switches
+//5'b10000 : io_data_out_mon <= PORT_10;
+//5'b01010 : io_data_out_mon <= PORT_0A;	// x loc
+//5'b01011 : io_data_out_mon <= PORT_0B;	// y loc
+//5'b01100 : io_data_out_mon <= PORT_0C;	// rojobot info
+//5'b01101 : io_data_out_mon <= PORT_0D;	// sensor
+5'b01010 : io_data_out_mon <= PORT_1A;	// x loc mon
+5'b01011 : io_data_out_mon <= PORT_1B;	// y loc mon
+5'b01100 : io_data_out_mon <= PORT_1C;	// rojobot info mon
+5'b01101 : io_data_out_mon <= PORT_1D;	// sensor mon
+5'b01110 : io_data_out_mon <= PORT_0E;	// y upper
+default : io_data_out_mon <= 8'bXXXXXXXX ;  
 endcase
 end
 /////////////////////////////////////////////////////////////////////////////////
@@ -148,7 +190,20 @@ case (port_id[4:0])
 5'b10110 : PORT_16 <= io_data_in;
 // (o) decimal points 7:4 port address
 5'b10111 : PORT_17 <= io_data_in;
+// motor control in monster
+//5'b11001 : PORT_19 <= io_data_in_mon;
  
+endcase
+
+
+end
+end
+
+always @ (posedge sysclk) begin
+// 'write_strobe' is used to qualify all writes to general output ports.
+if (write_strobe_mon == 1'b1) begin
+case (port_id_mon[4:0]) 
+5'b11001 : PORT_19 <= io_data_in_mon;
 endcase
 
 
@@ -170,6 +225,18 @@ interrupt <= 1'b1;
 end
 else begin
 interrupt <= interrupt;
+end
+end // always
+
+always @ (posedge sysclk) begin
+if (interrupt_ack_mon == 1'b1) begin
+interrupt_mon <= 1'b0;
+end
+else if (interrupt_request_mon == 1'b1) begin
+interrupt_mon <= 1'b1;
+end
+else begin
+interrupt_mon <= interrupt_mon;
 end
 end // always
 endmodule

@@ -55,6 +55,7 @@ output 	AUD_PWM, AUD_SD
  // internal variables
 wire [15:0]db_sw;		// debounced switches
 wire [5:0]db_btns;		// debounced buttons
+wire [3:0]db_btns_joy;
 wire sysclk;			// 66MHz clock from clock generator 
 wire sysreset;			// system reset signal –asserted
 						// high to force reset
@@ -64,22 +65,22 @@ wire [7:0]segs_int;		// segment outputs (internal)
 wire [63:0]digits_out;	// digits_out (only for simulation)
 
 // PicoBlaze interface to connect the interface 
-wire [11:0]address;
-wire [17:0]instruction;
-wire bram_enable;
-wire [7:0]port_id;
-wire [7:0]out_port;
-wire [7:0]in_port;
-wire write_strobe;
-wire k_write_strobe;
-wire read_strobe;
-wire interrupt;
-wire interrupt_ack;
-wire kcpsm6_sleep; 
-wire kcpsm6_reset;
-wire cpu_reset;
-wire rdl;
-wire int_request;
+wire [11:0]address, address_mon;
+wire [17:0]instruction, instruction_mon;
+wire bram_enable, bram_enable_mon;
+wire [7:0]port_id, port_id_mon;
+wire [7:0]out_port, out_port_mon;
+wire [7:0]in_port, in_port_mon;
+wire write_strobe, write_strobe_mon;
+wire k_write_strobe, k_write_strobe_mon;
+wire read_strobe, read_strobe_mon;
+wire interrupt, interrupt_mon;
+wire interrupt_ack, interrupt_ack_mon;
+wire kcpsm6_sleep, kcpsm6_sleep_mon; 
+wire kcpsm6_reset, kcpsm6_reset_mon;
+wire cpu_reset, cpu_reset_mon;
+wire rdl, rdl_mon;
+wire int_request, int_request_mon;
 
 // PicoBlaze I/O registers
 wire [7:0] sw_high, sw_low, res1, res2;  
@@ -87,19 +88,20 @@ wire [7:0] leds_high, leds_low;
 wire [4:0] digit0_int, digit1_int, digit2_int, digit3_int, digit4_int, digit5_int, digit6_int, digit7_int;
 
 // bot i/o registers
-wire [7:0] MotCtl_in;   	// motor control in
+wire [7:0] MotCtl_in, MotCtl_in_mon;   	// motor control in
 wire [7:0] LocX_reg, RMDist_reg, LMDist_reg, LocY_reg, BotInfo_reg, Sensors_reg;  // outputs from bot
-wire [10:0] vid_row, vid_col, vid_row6, Locy6; // pixel display information
-wire [1:0] vid_pixel_out;	// pixel (location) value
+wire [7:0] LocX_reg_mon, LocY_reg_mon, BotInfo_reg_mon, Sensors_reg_mon;
+wire [10:0] vid_row, vid_col, vid_row6, Locy6, Locy6_mon; // pixel display information
+wire [1:0] vid_pixel_out, vid_pixel_out_mon;	// pixel (location) value
 wire [1:0] icon_pixel;		// icon pixel information
-wire [12:0] death_pixel, mil_pixel, rock_pixel;// from icon 
-wire  upd_sysregs;			// interupt from bit to proj2demo
+wire [12:0] death_pixel, mil_pixel, rock_pixel, mon_pixel, grass_pixel;// from icon 
+wire  upd_sysregs, upd_sysregs_mon;			// interupt from bit to proj2demo
 reg [6:0] LED;
 
 
 
 //// ************************figure what we're doing from demo*********
-
+assign Locy6_mon = LocY_reg_mon*12; 
 assign Locy6 = LocY_reg*12;      // we multiply locy from bot to scale 128 locations to 768
 assign vid_row6 = vid_row/12;	// we divide by 6 so we read from same location 6 times in a row
 								// to scale the screen to the map
@@ -109,11 +111,11 @@ assign dig6 = digit6_int[4:0];
 assign dig5 = digit5_int[4:0];
 // we are getting the info from the bot and displaying to help in the 
 // debug from the proj2demo assembly
-assign dig4 = {2'b00,BotInfo_reg[2:0]};  	// orientation from bot info
-assign dig3 = {1'b0,LocX_reg[7:4]};			// upper half of x loc
-assign dig2 = {1'b0,LocX_reg[3:0]};			// lower half of x loc
-assign dig1 = {1'b0,LocY_reg[7:4]};			// upper half of y loc
-assign dig0 = {1'b0,LocY_reg[3:0]};			// lower half of y loc
+assign dig4 = {2'b00,BotInfo_reg_mon[2:0]};  	// orientation from bot info
+assign dig3 = {1'b0,LocX_reg_mon[7:4]};			// upper half of x loc
+assign dig2 = {1'b0,LocX_reg_mon[3:0]};			// lower half of x loc
+assign dig1 = {1'b0,LocY_reg_mon[7:4]};			// upper half of y loc
+assign dig0 = {1'b0,LocY_reg_mon[3:0]};			// lower half of y loc
 
 
 // global assigns
@@ -158,7 +160,8 @@ assign seg = segs_int[6:0];
 			assign forward = (jstY >= 700) ? 1'b1 : 1'b0;
 			assign back = (jstY <= 300) ? 1'b1 : 1'b0;
 			assign left = (jstX <= 300) ? 1'b1 : 1'b0;
-			assign right = (jstX >= 700) ? 1'b1 : 1'b0;			
+			assign right = (jstX >= 700) ? 1'b1 : 1'b0;	
+			assign db_btns_joy = {left, forward, right, back};
 			
 			
 			
@@ -173,9 +176,11 @@ assign seg = segs_int[6:0];
 			always @(sndRec or sysreset or jstkData) begin
 					if(sysreset == 1'b1) begin
 							LED <= 7'b0000000;
+							//db_btns_joy <= 4'h0;
 					end
 					else begin
 							LED <= {forward, back, left, right, jstkData[1], jstkData[2], jstkData[0]};
+						//	db_btns_joy <= {left, forward, right, back};
 					end
 			end
 
@@ -274,7 +279,40 @@ APPCPUMAIN(
 .address (address),
 .instruction (instruction),
 .clk (sysclk));
+/////////*************************
+//MONSTER
+//////////////*******************
+kcpsm6 #(
+.interrupt_vector(12'h3FF),  		// location of interupt handler
+.scratch_pad_memory_size(64),		// build parameter
+.hwbuild(8'h00))					// can pass info on hardware build
+MONSTER(
+.address (address_mon),					
+.instruction (instruction_mon),
+.bram_enable (bram_enable_mon),
+.port_id (port_id_mon),
+.write_strobe (write_strobe_mon),		// write strobe to write to port
+.k_write_strobe (),		
+.out_port (out_port_mon),				
+.read_strobe (read_strobe_mon),
+.in_port (in_port_mon),
+.interrupt (interrupt_mon),				// signal generated from bot.v
+.interrupt_ack (interrupt_ack_mon),		// acknowledgement from proj2demo that it recieved
+.reset (kcpsm6_reset),			
+.sleep(kcpsm6_sleep),
+.clk (sysclk));
 
+ proj2demomon #(
+ .C_JTAG_LOADER_ENABLE(0),
+ .C_FAMILY("7S"),   		//Family 'S6' or 'V6' or '7S'
+ .C_RAM_SIZE_KWORDS(2)     	//Program size '1', '2' or '4'
+ )    						//Include JTAG Loader when set to 1'b1 
+ PGM2DEMOMON (    
+.rdl (rdl_mon),					// rdl is for jtag interface loading
+.enable (bram_enable_mon),		// enable the 
+.address (address_mon),
+.instruction (instruction_mon),
+.clk (sysclk));
 
 // instantiate the PicoBlaze I/O register interface
 nexys4_bot_if #(
@@ -287,12 +325,20 @@ N4IF(
 .io_data_out(in_port),    		// data from I/O register to Picoblaze   
 .interrupt_ack(interrupt_ack),	// signal to accept interrupt
 .interrupt(interrupt),			// the interrupt from the bot
+.write_strobe_mon(write_strobe_mon),	// write strobe to write ot ports
+.read_strobe_mon(read_strobe_mon),		// read strobe not used since no fifo
+.port_id_mon(port_id_mon),				// the prot id to be read or written
+.io_data_in_mon(out_port_mon),    		// data from Picoblaze to the I/O register
+.io_data_out_mon(in_port_mon),    		// data from I/O register to Picoblaze   
+.interrupt_ack_mon(interrupt_ack_mon),	// signal to accept interrupt
+.interrupt_mon(interrupt_mon),			// the interrupt from the bot
 .sysclk(sysclk),				// 66MHZ clock
 .sysreset(sysreset),			// reset
 
 // ports fpga fabric
 // unused for this current application
-.PORT_00({4'b0000, db_btns[4:1]}),	// (i) pushbuttons inputs
+//.PORT_00({4'b0000, db_btns[4:1]}),	// (i) pushbuttons inputs for buttons
+.PORT_00({4'b0000, db_btns_joy}),				//for joystick
 .PORT_01(sw_low),					// (i) slide switches
 .PORT_10({4'b0000, db_btns[4:1]}),	// (i) pushbutton inputs alternate port address
 .PORT_11(sw_high),					// (i) slide switches 15:8 (high byte of switches
@@ -309,7 +355,16 @@ N4IF(
 .PORT_0C(BotInfo_reg), 	//(i) Rojobot info register
 .PORT_0D(Sensors_reg),	//(i) Sensor register
 /************************************************************/
+// MONSTER
+.PORT_19(MotCtl_in_mon),	// (o) Rojobot motor control output from system
 
+// what proj2demo uses to calculate how to drive the bot
+/************************************************************/
+.PORT_1A(LocX_reg_mon), 	//(i) X coordinate of rojobot location
+.PORT_1B(LocY_reg_mon), 	//(i))Y coordinate of rojobot location
+.PORT_1C(BotInfo_reg_mon), 	//(i) Rojobot info register
+.PORT_1D(Sensors_reg_mon),	//(i) Sensor register
+/************************************************************/
 // unused for this current application
 .PORT_02(leds_low),		// LEDS [7:0]
 .PORT_03(digit3_int),	// (o) digit 3 port address
@@ -327,11 +382,12 @@ N4IF(
 .PORT_18(res2),			// (o) *RESERVED* alternate port address
 
 // used as interrupt to update loc and senor regs
-.interrupt_request(upd_sysregs)// from bot at 50mhz
+.interrupt_request(upd_sysregs),// from bot at 50mhz
+.interrupt_request_mon(upd_sysregs_mon)
 );
 
 // instantiate bot
-bot(
+bot31(
 	// system interface registers
 .MotCtl_in(MotCtl_in),				// Motor control input	
 .LocX_reg(LocX_reg),				// X-coordinate of rojobot's location		
@@ -350,10 +406,33 @@ bot(
 	// interface to the system
 .clk(sysclk),						// 66MHZ clock
 .reset(sysreset),					// system reset
-.upd_sysregs(upd_sysregs)			// flag from PicoBlaze to indicate that the system registers 
+.upd_sysregs(upd_sysregs),			// flag from PicoBlaze to indicate that the system registers 
 									// (LocX, LocY, Sensors, BotInfo)have been updated
+.Bot_Config_reg(8'b0001_0011)
 );
+bot(
+	// system interface registers
+.MotCtl_in(MotCtl_in_mon),				// Motor control input	
+.LocX_reg(LocX_reg_mon),				// X-coordinate of rojobot's location		
+.LocY_reg(LocY_reg_mon),				// Y-coordinate of rojobot's location
+.Sensors_reg(Sensors_reg_mon),			// Sensor readings
+.BotInfo_reg(BotInfo_reg_mon),			// Information about rojobot's activity
+.LMDist_reg(LMDist_reg),			// left motor distance register
+.RMDist_reg(RMDist_reg),			// right motor distance register
+						
+	// interface to the video logic scaled for read same value 16 times
+.vid_row(vid_row6),						// video logic row address divided by 16
+.vid_col({4'b0000,vid_col[10:4]}),		// video logic column address divided by 16
 
+.vid_pixel_out(vid_pixel_out_mon),			// pixel (location) value
+
+	// interface to the system
+.clk(sysclk),						// 66MHZ clock
+.reset(jstkData[2]),					// system reset
+.upd_sysregs(upd_sysregs_mon)			// flag from PicoBlaze to indicate that the system registers 
+									// (LocX, LocY, Sensors, BotInfo)have been updated
+//.Bot_Config_reg(8'b0001_1011)
+);
  // timing to control the vga
 dtg DTG(
 		.clock(sysclk),				// 66MHZ clock
@@ -374,7 +453,9 @@ colorizer COLOR(
 	 // colors are 4 bits wide weighted
 	 .death_pixel(death_pixel),
 	 .mil_pixel(mil_pixel),
-		.rock_pixel(rock_pixel),
+	 .rock_pixel(rock_pixel),
+	 .grass_pixel(grass_pixel),
+	 .mon_pixel(mon_pixel),
      .vga_red(vga_red),				// how much red to output for that pixel
      .vga_green(vga_green),			// how much green to output for that pixel
      .vga_blue(vga_blue) 			// how much blue to output for that pixel
@@ -386,9 +467,12 @@ icon ICON(
         .pixel_column(vid_col),		// the current location of the pixel stream column
         .LocY(Locy6),				// loc Y from bot scaled * 16 to get 4096
         .LocX({LocX_reg, 4'b0000}),	// loc x from bot scaled * 16 to get 4096
+        .LocY_mon(Locy6_mon),				// loc Y from bot scaled * 16 to get 4096
+        .LocX_mon({LocX_reg_mon, 4'b0000}),
         .Botinfo(BotInfo_reg),		// bot info orientation for icon selection
 		.death_pixel(death_pixel),
 		.mil_pixel(mil_pixel),
+		.mon_pixel(mon_pixel),
 		.rock_pixel(rock_pixel),
         .icon_pixel(icon_pixel)		// the output for the colorizer
        
