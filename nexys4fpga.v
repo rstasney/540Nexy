@@ -473,6 +473,7 @@ icon ICON(
 		.death_pixel(death_pixel),
 		.mil_pixel(mil_pixel),
 		.mon_pixel(mon_pixel),
+		.grass_pixel(grass_pixel),
 		.rock_pixel(rock_pixel),
         .icon_pixel(icon_pixel)		// the output for the colorizer
        
