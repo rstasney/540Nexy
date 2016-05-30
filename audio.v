@@ -1,60 +1,70 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 11/28/2015 06:54:29 PM
-// Design Name: 
-// Module Name: audio
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
 
 module audio(
     input clk, // 25 MHz clock
     input jumpSound,
+//    output [11:0] music_out,
     output PWM_out
     );
-    wire[7:0] music_data;
+    
+    reg clk_8khz=0;
     
     // Generate 8khz clock for reading samples
-    reg[11:0] divideCounter=0;
-    reg clk_8khz=0;
+     reg[11:0] divideCounter=0;
+    
     always @(posedge clk) begin
-        if (divideCounter < 1563) begin
-            divideCounter <= divideCounter+1;
-        end else begin
-            divideCounter <= 0;
-            clk_8khz <= !clk_8khz;
-        end
-    end
+        if (divideCounter == 3125) begin   //9,999,999
+             clk_8khz <= 1'b1;
+             divideCounter <= 1'b0;
+         end
+         else begin
+            divideCounter <= divideCounter + 1'b1;
+             clk_8khz <= 1'b0; 
+         end
+     end
+    
+    parameter integer	DEPTH		= 105410;  //edited
+    
+    wire[7:0] music_data;
+    
+   // assign music_out = temp_address;    //edited
+    //parameter integer	DEPTH		= 189035;  //edited
     
     audio_PWM audioPWM(.clk(clk),.reset(0),.music_data(music_data),.PWM_out(PWM_out));
     
-    /////////////////////////////////////////////////////////////////////////////
-    //////////// Crashing Sound /////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////
- /*   
-    wire[11:0] crashAddress;
-    wire[3:0] crashAudio;
-    soundTimer crashTimer(clk,clk_8khz,crashSound,crashAddress);
-    crash_sound crash_sound(.a(crashAddress),.spo(crashAudio));
-    wire[3:0] correctedCrashAudio = (crashAudio[3])? + (128-crashAudio[2:0]):(128+crashAudio[2:0]);
-*/    
+ 
     /////////////////////////////////////////////////////////////////////////////
     //////////// Jumping Sound //////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////////////////
+        wire[16:0] jumpAddress;
+//        wire[7:0] jumpAudio;
+        
+        blk_mem_gen_0 heartbeat (
+          .clka(clk),    // input wire clka
+          .addra(jumpAddress),  // input wire [11 : 0] addra
+          .douta(music_data)  // output wire [3 : 0] douta
+        );
+        
+       reg  [16:0]  temp_address;
+       assign jumpAddress = temp_address;
+     
+       
+       
+       
+       always @(posedge clk_8khz) begin
+           if(temp_address == DEPTH) begin
+                    temp_address <= 11'd0;
+           end
+           else
+             temp_address <= temp_address + 11'b1;
+       end
+            
+    endmodule
     
+    
+    
+    /*
     wire[11:0] jumpAddress;
     wire[3:0] jumpAudio;
     soundTimer jumpTimer(clk,clk_8khz,jumpSound,jumpAddress);
@@ -86,3 +96,4 @@ module soundTimer   // Timing for an 8khz sound
         end
     end
 endmodule
+*/
