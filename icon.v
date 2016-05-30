@@ -31,7 +31,7 @@ module icon(
    input [11:0] LocX_mon,						// location of bot from bot.v multiplied by 16 for scaling
    input [11:0] LocY_mon,						// location of bot from bot.v multiplied by 12 for scaling
    input [2:0] Botinfo,						// orientation of bot from bot.v
-   output reg [12:0] death_pixel, mil_pixel,rock_pixel, mon_pixel,grass_pixel,
+   output reg [12:0] death_pixel, mil_pixel,rock_pixel, mon_pixel, grass_pixel,
    output reg [1:0] icon_pixel				// output of color coded info to colorizer
 );
 
@@ -66,10 +66,10 @@ module icon(
        else begin  // check to see if there is icon data in the location of the current pixel stream
 	//	death <= death; // default
 		//stone 
-		if (tick == 127)
-		tick <= 0;
-		else 
-		tick <= tick + 1;
+		//if (tick == 127)
+		//tick <= 0;
+		//else 
+		//tick <= tick + 1;
 		//stone <= ((pixel_row/2) * 256) + tick/2;  //  (tick * 256) + pixel_column;
 		//stone <= (((pixel_row/4)*256) + (pixel_column/4));
 	//	stone <= (((pixel_row)*256) + (tick));
@@ -97,10 +97,12 @@ module icon(
 //we need to compenste for that	and just draw him from the "box" here are the last 4 attemps I made you can test them bu just having the hero in a different quadrant from
 // the monster and that way you can test 4 ways at once
 // Please help find a solution				
-						mona <= ((pixel_column + 6'b11_1111)) + ((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128); //#1
+						mona <= tick + ((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);
 						mon_pixel <= {1'b1, monout};
+						tick <= tick + 1;
 					end	
 					else begin
+						tick <= 0;
 						mona <= mona;
 						icon_pixel <= 2'b00;
 						mon_pixel <= 13'b0000000000000;			
@@ -108,10 +110,12 @@ module icon(
 				end			
 				else begin
 					if (((pixel_column >= 11'b001_1100_0000 - ( (LocX - LocX_mon))) && (pixel_column <= 11'b010_0100_0000 - ( (LocX - LocX_mon))))&&((pixel_row >= 11'b001_0100_0000 + ( (LocY_mon - LocY)))&& (pixel_row <= 11'b001_1100_0000 + ( (LocY_mon - LocY))))) begin				
-						mona <= (pixel_column - 11'b001_1100_0000 -  (LocX - LocX_mon))+((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);  ///#2
+						mona <= tick + ((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);
 						mon_pixel <= {1'b1, monout};
+						tick <= tick + 1;
 					end	
 					else begin
+						tick <= 0;
 						mona <= mona;
 						icon_pixel <= 2'b00;
 						mon_pixel <= 13'b0000000000000;			
@@ -121,10 +125,12 @@ module icon(
 			else begin
 				if (LocY >= LocY_mon)begin
 					if (((pixel_column >= 11'b001_1100_0000 + ((LocX_mon - LocX))) && (pixel_column <= 11'b010_0100_0000 + ( (LocX_mon - LocX))))&&((pixel_row >= 11'b001_0100_0000 - ( (LocY - LocY_mon)))&& (pixel_row <= 11'b001_1100_0000 - ( (LocY - LocY_mon))))) begin				
-						mona <= tick +((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);  ///#3
+						mona <= tick + ((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);
 						mon_pixel <= {1'b1, monout};
+						tick <= tick + 1;
 					end
 					else begin
+						tick <= 0;
 						mona <= mona;
 						icon_pixel <= 2'b00;
 						mon_pixel <= 13'b0000000000000;			
@@ -132,10 +138,12 @@ module icon(
 				end	
 				else begin
 					if (((pixel_column >= 11'b001_1100_0000 + ( (LocX_mon - LocX))) && (pixel_column <= 11'b010_0100_0000 + ( (LocX_mon - LocX))))&&((pixel_row >= 11'b001_0100_0000 + ( (LocY_mon - LocY)))&& (pixel_row <= 11'b001_1100_0000 + ( (LocY_mon - LocY))))) begin				
-						mona <= mona+1;   ///# 4
+						mona <= tick + ((pixel_row - (11'b001_0100_0000 - (LocY - LocY_mon)))*128);
 						mon_pixel <= {1'b1, monout};
+						tick <= tick + 1;
 					end	
 					else begin
+						tick <= 0;
 						mona <= mona;
 						icon_pixel <= 2'b00;
 						mon_pixel <= 13'b0000000000000;			
