@@ -42,7 +42,7 @@ module spiMode0(
     MISO,
     MOSI,
     SCLK,
-	 BUSY,
+	BUSY,
     DOUT
     );
 
@@ -59,7 +59,7 @@ module spiMode0(
 			output MOSI;					// Master out slave in
 			output SCLK;					// Serial clock
 			output BUSY;					// Busy if sending/receiving data
-			output [7:0] DOUT;			// Current data byte read from the slave
+			output [7:0] DOUT;				// Current data byte read from the slave
 
 	// ===========================================================================
 	// 							  Parameters, Regsiters, and Wires

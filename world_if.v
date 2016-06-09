@@ -78,9 +78,9 @@ module world_if(
 	
 	input				clk,			// system clock
 						reset,			// system reset
-	output reg			upd_sysregs		// flag from PicoBlaze to indicate that the system registers 
+	output reg			upd_sysregs,		// flag from PicoBlaze to indicate that the system registers 
 										// (LocX, LocY, Sensors, BotInfo)have been updated	
-		
+	input 		[7:0]		BotConfig	// added from 31	
 );
 
 // internal variaables		
@@ -112,7 +112,8 @@ always @(posedge clk) begin
 		4'b0100 :	DataOut <= Sensors_int;
 		4'b0101 : 	DataOut <= LMDist_int;		
 		4'b0110 : 	DataOut <= RMDist_int;	
-		4'b0111 : 	DataOut <= 8'd00;			// *RESERVED*
+		4'b0111 : 	DataOut <= BotConfig;
+		//4'b0111 : 	DataOut <= 8'd00;			// *RESERVED*
 				
 		// I/O registers for map logic	
 		4'b1000 : 	DataOut <= MapX;			// output port

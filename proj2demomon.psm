@@ -1,7 +1,7 @@
 ; -----------------------------------------------------------------
-; proj2demo.psm - Hero for Dungeon Crawler
+; proj2demo.psm - Final Project Dungeon Crawler Monster black line controller
 ;
-; Version:	5.1
+; Version:	5.0
 ; Author:	Roy Kravitz modified by Randon Stasney, Dakota Ward, Naveen Yalla, Kajal Zatale
 ; Date:		6/5/2016
 ;
@@ -21,33 +21,56 @@
 ;						corrupts location 3 of the ROM so the code is written to avoid that location
 ; 12-Oct-14		RK		Modified code to take advantage of the 8 digit Nexys4 (vs. 4 on the Nexys3) display
 ; 27-Apr-16     RS		Modified to run project 2 autonomusly
-; 25-May-16		RS		Modified to run hero on joystick
+; 26-May-16		RS		Modified to run Monster in Dungeon Crawler
 ;
 ; Description:
 ; ============
 ; This program demonstrate the Rojobot world emulator.  It is modeled after
 ; the the Verilog Rojobot implemented in the Getting Started application only this demo is based
-; on the full Rojobot emulator (as implemented in bot31.v instead of the simplified
+; on the full Rojobot emulator (as implemented in bot.v instead of the simplified
 ; Rojobot model used in the Getting Started project
 ;
-; The demo uses the joystick to control the motors driving the "Hero" bot
-; The hero bot uses the current motor drivers in bot31.v.  First we turn to face
-; the direction the joystick is pressed then we check to see if if there is a walls
-; obstreuction in our way which would prevent forward movement.  If not we then move forward
-; one x or y location and accept new joystick input
+; The demo uses the 4 pushbuttons to control the Rojobot as follows:
+;	btn_left	- Left Motor forward
+; 	btn_up		- Left Motor reverse
+;	btn_right	- Right Motor forward
+;	btn_down	- Right Motor reverse
+; If neither of the two buttons that control each motor is pushed, then the motor is stopped. 
+; If both of the two buttons that control each motor are pushed, the actions cancel each other
+; leaving the motor stopped.
 ;
-; Decimal point 0 toggles
-; on and off every interrupt (~every 100 msec w/ updt_sysregs)	
-; 
+; The demo takes advantage of the wider display on the Nexys4 (8 digits vs. 4) to
+; make the rojobot state easier for follow. The digits are mapped as follows:
+;	digit[7:5] - compass heading
+;	digit[4] - movement (Fwd, Rev, Stopped, turning)
+;	digits[2:1] - column position (X) in hex
+;	digits[1:0] - row position (Y) in hex
 ;
-; NOTE:  We added movement control via the pushbuttons if slide zero is high
+; Decimal points 5 and 4 are turned on to highlight the movement display.  Decimal point 0 toggles
+; on and off every interrupt (~every 100 msec w/ updt_sysregs)
+	
+; The sensors are displayed on the LEDs in both display modes.
+; Decimal point 0 toggles on and off every interrupt (~every 100 msec w/ updt_sysregs)
+;
+; NOTE:  WE LEFT THE PUSHBUTTON CODE IN THE HOPES OF HAVING OPTIONAL CONTROL OF HOW THE BOT MOVES, 
+; WETHER VIA PUSHBUTTON OR AUTONMOUS DESCRIPTION THAT FOLLOWS IS FOR THE AUTONMOUS PORTION THAT WAS ADDDED
 ;
 ; Description:
 ; ============
-; The demo now moves from a main loop that checks joystick input, if there is an input 
-; it calls right turn function call until it's facing the direction indicated by the joystick
-; if there is no obstruction in its path it then calls move forward one function and returns 
-; to main loop awaiting further instruction.
+; The demo now moves from a main loop that utilizes function calls to drive forward one square, back up one square,
+; or makes a right hand turn.  The main loop itself is structured to move forward then check sensors.  If both 
+; proximity sensors show obstruction we shut down. We then check to see if we are on the black line, if we are 
+; we continue if not we continue deeper into the routine to find the black line again.
+;
+; The routine to get back to the line is simple, from the last known line location we turn right 45 and then
+; go forward and check if at any time we find the line we simply continue.  If we don't find the line we back up
+; two spaces to check 215 degree angle before going back to to the last known line location.  Within three of these 
+; checks we will find the line if it exists and do so without having to save state to avoid traversing the line 
+; in reverse.
+
+; The needed display functionality was moved to the top module to show during debugging this module.  The semaphore was moved 
+; out of the old main loop into the sema function to preserve the handshaking with the bot.v. We left decimal 0 toggling
+; with the interrupt from the bot.v
 ; -----------------------------------------------------------------	
 
 ; ============================================
@@ -156,7 +179,7 @@ CONSTANT	MSK_LEDS_LO,	FF		; Mask for rightmost 8 LEDs on the Nexys4
 CONSTANT	MSK_LEDS_HI,	FF		; Mask for the lefmost 8 LEDs on the Nexys4
 
 ; bit mask for botinfo lowestbit
-CONSTANT	BOT_LO,			FD		; Mask for lsb botinfo
+CONSTANT	BOT_LO,			FE		; Mask for lsb botinfo
 
 ; bit mask for display character codes and decimal points
 CONSTANT	MSK_CCODE,		1F		; Character codes are in lower 5 bits
@@ -283,12 +306,11 @@ CONSTANT	SP_MVMTF,		1C		; Fast right turn - display lower case R
 CONSTANT	SP_SEM,			20		; Semaphore between isr and main loop
 CONSTANT	SP_TEMP1,		21		; Temp storage.  Used by ISR
 CONSTANT	SP_TEMP2,		22		;
-CONSTANT	SP_TEMP3,		23		; Temp for movement
-CONSTANT	SP_TEMP4,		24		;
+CONSTANT	SP_LMDIST,		23		; Storage for left and right motor distance counters
+CONSTANT	SP_RMDIST,		24		;
 CONSTANT	SP_OLDMVMT,		25		; Old movement value 
 CONSTANT	SP_OLDHDG,		26		; Old heading value
 CONSTANT	SP_OLDDP,		27		; Old decimal points
-CONSTANT	SP_TEMP5,		28
 
 ; =========================
 ; === Digits 7, 6, 5, 4 ===
@@ -323,81 +345,38 @@ main:			CALL	init_btnluptbl				; initialize button to MotCtl lookup table
 
 ; ==================
 ; === Main  Loop ===
-; ==== uses s2 s4===
+; ==== uses s2 =====
 ; ==================
 
-joystick: 		
-				CALL 	sema						; sync with bot31.v
-				INPUT	s2,		PA_SLSWTCH			; read the slide switches
-				AND		s2, 01						; mask slide switch zero
-				COMPARE	s2, 00						; test sw 0 
-				JUMP		z,	joy					; if low drive via joystic
-				INPUT		s4,	PA_PBTNS_ALT		; otherwise read button input
-				JUMP		but						; jump past read joystick input
-				
-joy:			
-				INPUT	s4, PA_PBTNS				; read joystick input
-
-but:
-				COMPARE	s4, 00						; if no input return to loop
-				JUMP		z,	joystick
-				COMPARE	s4,	01						; if up input 
-				JUMP 	z, 	go_back					; jump back "S"  routine
-				COMPARE	s4,	02						; if right input
-				JUMP		z,	go_right			; jump right "E" routine
-				COMPARE	s4,	04						; if down input 
-				JUMP		z,	go_forward			; jump forward "N" routine
-				COMPARE	s4,	08						; if left input
-				JUMP		z,	go_left				; jump left "W" routine
-				JUMP		joystick				; unkown jump back main loop
-				
-go_back:		
-				LOAD		s2,	Botinf				; read in orientation info
-				AND		s2,	MSKORIENT				; set orientation mask for direction
-				COMPARE	s2,	OR_S					; compare to see if we're facing right direction
-				JUMP		z, 	back_turn			; if we are continue
-				CALL		righTurn				; else make a right turn 
-				JUMP		go_back					; loop back to check direction again
-back_turn:		
-				CALL		forwardOne				; call function to move forward 1 space
-				JUMP		joystick				; return to main loop
-				
-				
-
-go_right:		
-				LOAD		s2,	Botinf				; read in info
-				AND		s2,	MSKORIENT				; set orientation mask for direction
-				COMPARE	s2,	OR_E					; compare to see if we're facing right direction
-				JUMP		z, 	right_turn			; if we are continue
-				CALL		righTurn				; else make a right turn 
-				JUMP		go_right				; loop back to check direction again
-right_turn:		
-				CALL		forwardOne				; call function to move forward 1 space
-				JUMP		joystick				; return to main loop
-				
-go_forward:		
-				LOAD		s2,	Botinf				; read in info
-				AND		s2,	MSKORIENT				; set orientation mask for direction
-				COMPARE	s2,	OR_N					; compare to see if we're facing right direction
-				JUMP		z, 	forward_turn		; if we are continue
-				CALL		righTurn				; else make a right turn 
-				JUMP		go_forward				; loop back to check direction again
-forward_turn:		
-				CALL		forwardOne				; call function to move forward 1 space
-				JUMP		joystick				; return to main loop
-go_left:		
-				LOAD		s2,	Botinf				; read in info
-				AND		s2,	MSKORIENT				; set orientation mask for direction
-				COMPARE	s2,	OR_W					; compare to see if we're facing right direction
-				JUMP		z, 	left_turn			; if we are continue
-				CALL		righTurn				; else make a right turn 
-				JUMP		go_left					; loop back to check direction again
-left_turn:		
-				CALL		forwardOne				; call function to move forward 1 space
-				JUMP		joystick				; return to main loop
-				
-				
-
+													
+auto_step:		
+				CALL		forwardOne					; start by moving forward one space
+				CALL 		sema						; sync with bot.v to make sure senosr data is updated
+				LOAD 		s2, 	Sensor				; load sensors into register to evaluate
+				AND 		s2, 	18 					; just get prox sensor info
+				COMPARE		s2, 	18 					; check prox sensor bits
+				JUMP 		Z,		maze_Done			; if both l&r sensors are active we have finished
+				LOAD 		s2, 	Sensor				; reload sensor
+				AND 		s2, 	07 					; just get black line info
+				COMPARE		s2, 	00 					; check if still on line 
+				JUMP 		Z, 		auto_step			; if still on line we loop back to drive and drive forward again
+				CALL		backOne						; else we back up once to get back to known last line
+testTurn:		CALL        righTurn					; make right turn
+				CALL		forwardOne					; move forward to check if we are now on line
+				CALL 		sema						; sync with bot.v to make sure senosr data is updated
+				LOAD 		s2, 	Sensor				; load sensors into register to evaluate
+				AND 		s2, 	07 					; just get black line info
+				COMPARE		s2, 	00 					; check if now on line
+				JUMP 		Z, 		auto_step			; if we found line continue from top
+				CALL 		backOne						; else back up two spaces to check 180 from this angle
+				CALL 		backOne
+				CALL 		sema						; sync with bot.v to make sure senosr data is updated				
+				LOAD 		s2, 	Sensor				; load sensors into register to evaluate
+				AND 		s2, 	07 					; just get black line info
+				COMPARE		s2, 	00 					; check if now on line
+				JUMP 		Z, 		turnAround			; if we found line need to face forward
+				CALL 		forwardOne					; else we go back to last known line location for 
+				JUMP		testTurn					; next right turn angle
 
 				
 ;---------------------
@@ -405,10 +384,9 @@ left_turn:
 ;
 ; Registers used s6
 ;---------------------
-sema:			
-				FETCH	s6,		SP_SEM				;		while (SP_SEMA == 0)  {}   // loop until isr updates rojobot registers
+sema:			FETCH	s6,		SP_SEM				;		while (SP_SEMA == 0)  {}   // loop until isr updates rojobot registers
 				COMPARE	s6,		00					;
-				JUMP		Z,		sema				;       
+				JUMP	Z,		sema				;       
 				FETCH	s6,		SP_SEM				; 		
 				SUB		s6,		01					;		decrement semaphore
 				STORE	s6,		SP_SEM				;		store result back for bot.v interupt
@@ -760,32 +738,19 @@ next_loc:		LOAD		s0,		LocX				; Dig[3:2] gets X-coordinate
 ;
 ; Registers used s0 s1 s3
 ;---------------------------------------------------
-forwardOne:		
-				STORE		s0,		SP_TEMP3			; save registers in scratchpad
-				LOAD 		s0, 	Sensor				; load sensors into register to evaluate
-				AND 		s0, 	18 					; just get prox sensor info
-				COMPARE		s0, 	18 					; check prox sensor bits
-				JUMP 		Z,		walls				; if both l&r sensors are high you are facing a wall so return
-														; !!! walking forward when you can't makes bot stuck  !!!
-				STORE		s1,		SP_TEMP4			; save registers in scratchpad
-				STORE		s3,		SP_TEMP5			; save registers in scratchpad
-				LOAD		s0,		LocX				; read locx
-				LOAD		s1,		LocY				; read locy
-				LOAD		s3,		FF
-				OUTPUT 		s3,		PA_MOTCTL_IN		; tell Rojobot move forward
-compforw:		
-				CALL 		sema						; sync with bot31.v
-				COMPARE 	s0,		LocX				; see if x changed
-				JUMP 		NZ, 	forwRet				; if it did we have moved jump to end
-				COMPARE 	s1,		LocY				; if not check to see if we have moved in the y direction
-				JUMP 		Z, 		compforw			; if not then we have moved on neither axis jump back until we do
+forwardOne:		LOAD		s0,		LocX			; read locx
+				LOAD		s1,		LocY			; read locy
+				LOAD		s3,		33
+				OUTPUT 		s3,		PA_MOTCTL_IN_ALT	; tell Rojobot move forward
+compforw:		CALL sema
+				COMPARE 	s0,		LocX			; see if x changed
+				JUMP NZ, 	forwRet					; if it did we have moved jump to end
+				COMPARE 	s1,		LocY			; if not check to see if we have moved in the y direction
+				JUMP Z, 	compforw				; if not then we have moved on neither axis jump back until we do
 forwRet:		
-				LOAD		s3,		00					; all motor off
-				OUTPUT 		s3,		PA_MOTCTL_IN		; halt for next instruction
-				FETCH		s3,		SP_TEMP5			; restore s0, s1, s3
-				FETCH		s1,		SP_TEMP4
-walls:			FETCH		s0,		SP_TEMP3					
-				RETURN									; and return				
+				LOAD		s3,		00				; all motor off
+				OUTPUT 		s3,		PA_MOTCTL_IN_ALT	; halt for next instruction
+				RETURN								; and return				
 				
 ;---------------------------------------------------------------
 ; backOne() - backs up bot one location
@@ -795,7 +760,7 @@ walls:			FETCH		s0,		SP_TEMP3
 backOne:		LOAD		s0,		LocX			; read locx
 				LOAD		s1,		LocY			; read locy
 				LOAD		s3,		EE				; value of right and left motors backward 
-				OUTPUT	 	s3,		PA_MOTCTL_IN	; tell Rojobot back up
+				OUTPUT	 	s3,		PA_MOTCTL_IN_ALT	; tell Rojobot back up
 				
 ; example breadcrumb used for debug using the leds that told us when we made it to this location in the code
 ; code taken from interupt handler				
@@ -810,7 +775,7 @@ compbck:		CALL 		sema					; sync with bot.v
 				JUMP Z, 	compbck					; if not then we have moved on neither axis jump back until we do
 bckRet:			
 				LOAD		s3,		00				; all motor off
-				OUTPUT 		s3,		PA_MOTCTL_IN	; halt for next instruction
+				OUTPUT 		s3,		PA_MOTCTL_IN_ALT	; halt for next instruction
 				RETURN								; and return				
 								
 ;---------------------------------------------------
@@ -818,25 +783,17 @@ bckRet:
 ;
 ; Registers used s0 s1 s3
 ;---------------------------------------------------
-righTurn:		
-				STORE		s0,		SP_TEMP3		; save s0,s1,s3
-				STORE		s1,		SP_TEMP4	
-				STORE		s3,		SP_TEMP5
-				LOAD		s0,		Botinf			; reads orientation
+righTurn:		LOAD		s0,		Botinf			; reads orientation
 				OR			s0, 	BOT_LO			; mask all but lowest bit
-				LOAD		s3,		EF				; load value of right motor backward left forward
-				OUTPUT	 	s3,		PA_MOTCTL_IN	; fast right turn
-compRT:			
-				CALL 		sema					; sync with bot31.v
+				LOAD		s3,		02				; load value of right motor backward
+				OUTPUT	 	s3,		PA_MOTCTL_IN_ALT	; right turn
+compRT:			CALL 		sema					; sync with bot.v
 				LOAD		s1,		Botinf			; reads orientation
-				OR			s1, 	BOT_LO			; mask all but second lowest bit
-				COMPARE 	s0,		s1				; if bit has incremented we have completed a 90 degree turn
-				JUMP 		Z, 		compRT			; if not loop back until the bot has
+				OR			s1, 	BOT_LO			; mask all but lowest bit
+				COMPARE 	s0,		s1				; if bit has incremented we have completed a 45 degree turn
+				JUMP Z, 	compRT					; if not loop back until the bot has
 				LOAD		s3,		00				; all motor off
-				OUTPUT 		s3,		PA_MOTCTL_IN	; halt for next instruction
-				FETCH		s0,		SP_TEMP3		; restore s0, s1, s3
-				FETCH		s1,		SP_TEMP4
-				FETCH		s3,		SP_TEMP5
+				OUTPUT 		s3,		PA_MOTCTL_IN_ALT	; halt for next instruction
 				RETURN								; and return				
 												
 
@@ -849,7 +806,7 @@ turnAround:		CALL		righTurn				; calls 4 right turns to turn 180
 				CALL		righTurn
 				CALL		righTurn
 				CALL		righTurn
-				JUMP		joystick				; begining of main loop that drives forward
+				JUMP		auto_step				; begining of main loop that drives forward
 				
 ;---------------------------------------------------
 ;maze_Done() - stops
@@ -1037,14 +994,14 @@ isr:			STORE		s6,		SP_TEMP1			; 	save s6, s5
 				TEST		s6,		FF					;	if (SP_SEM == 0) {  // update system register values
 				JUMP		NZ,		isr_L0				; -- ZF == 0 says semaphore != 0
 													;		// no - get the data from the rojobot emulator
-				INPUT		LocX,	PA_LOCX				;		get Rojobot X-coordinate 
-				INPUT		LocY,	PA_LOCY				;		get Rojobot Y-coordinate
-				INPUT		Botinf,	PA_BOTINFO			;		get Rojobot Movement and Orientation
-				INPUT		Sensor,	PA_SENSORS			;		get Rojobot Sensors
-				;INPUT		s5,		PA_LMDIST			;		get left and right motor distance counters
-				;STORE		s5,		SP_LMDIST			;		not displayed in this program but let's stash them
-				;INPUT		s5,		PA_RMDIST			;		in case we decide we need them 
-				;STORE		s5,		SP_RMDIST			;				  
+				INPUT		LocX,	PA_LOCX_ALT				;		get Rojobot X-coordinate 
+				INPUT		LocY,	PA_LOCY_ALT				;		get Rojobot Y-coordinate
+				INPUT		Botinf,	PA_BOTINFO_ALT			;		get Rojobot Movement and Orientation
+				INPUT		Sensor,	PA_SENSORS_ALT			;		get Rojobot Sensors
+				INPUT		s5,		PA_LMDIST			;		get left and right motor distance counters
+				STORE		s5,		SP_LMDIST			;		not displayed in this program but let's stash them
+				INPUT		s5,		PA_RMDIST			;		in case we decide we need them 
+				STORE		s5,		SP_RMDIST			;				  
 				ADD		s6,		01					;		increment semaphore
 				STORE		s6,		SP_SEM				;	}  // update system register values
 isr_L0:			FETCH		s6,		SP_OLDDP			;	toggle  decimal point 0 (rightmost)

@@ -1,7 +1,7 @@
 //	dtg.v - Horizontal & Vertical Display Timing & Sync generator for VGA display
 //
 //	Version:		3.0	
-//	Author:			John Lynch & Roy Kravitz Modified by Randon Stasney and Dakota Ward
+//	Author:			John Lynch & Roy Kravitz Modified by Randon Stasney, Dakota Ward, Naveen Yalla, Kajal Zatale
 //	Last Modified:	5/7/16 (RS)
 //	
 //	 Revision History
@@ -16,7 +16,7 @@
 //	 vertical sync for a 1024 x 768 video image. 
 //	
 //	 Inputs:
-//			clock           - 66MHz Clock
+//			clock           - 65MHz Clock
 //			rst             - Active-high synchronous reset
 //	 Outputs:
 //			horiz_sync_out	- Horizontal sync signal to display

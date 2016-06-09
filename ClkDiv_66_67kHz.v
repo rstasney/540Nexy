@@ -2,23 +2,25 @@
 //////////////////////////////////////////////////////////////////////////////////
 // Company: Digilent Inc.
 // Engineer: Josh Sackos
+// Modified by Randon Stasney, Dakota Ward, Naveen Yalla, Kajal Zatale
 // 
-// Create Date:    07/11/2012
-// Module Name:    ClkDiv_66_67kHz 
-// Project Name: 	 PmodJSTK_Demo
-// Target Devices: Nexys3
-// Tool versions:  ISE 14.1
-// Description: Converts input 100MHz clock signal to a 66.67kHz clock signal.
+// Create Date:    		07/11/2012
+// Module Name:    		ClkDiv_66_67kHz 
+// Project Name: 	 	PmodJSTK_Demo
+// Target Devices: 		Nexys4 DDR
+// Tool versions:  		vivado 2015
+// Description: Converts input 65MHz clock signal to a 66.67kHz clock signal.
 //
 // Revision History: 
-// 						Revision 0.01 - File Created (Josh Sackos)
+// 						Revision 1.01 - File Created (Josh Sackos)
+// June 2016			converted to use 65 MHz clock from vivado for nexys4
 //////////////////////////////////////////////////////////////////////////////////
 
 // ============================================================================== 
 // 										  Define Module
 // ==============================================================================
 module ClkDiv_66_67kHz(
-    CLK,											// 100MHz onbaord clock form 65
+    CLK,											// 65MHz sysclk
     RST,											// Reset
     CLKOUT										// New clock output
     );

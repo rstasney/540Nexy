@@ -2,23 +2,24 @@
 //////////////////////////////////////////////////////////////////////////////////
 // Company: Digilent Inc.
 // Engineer: Josh Sackos
-// 
+// converted by Randon Stasney, Dakota Ward, Naveen Yalla, Kajal Zatale
 // Create Date:    07/11/2012
 // Module Name:    ClkDiv_5Hz
 // Project Name: 	 PmodJSTK_Demo
-// Target Devices: Nexys3
-// Tool versions:  ISE 14.1
-// Description: Converts input 100MHz clock signal to a 5Hz clock signal.
+// Target Devices: Nexys4DDR
+// Tool versions:  Vivado 2015
+// Description: Converts input 65MHz clock signal to a 5Hz clock signal.
 //
 // Revision History: 
-// 						Revision 0.01 - File Created (Josh Sackos)
+// 						Revision 1.01 - File Created (Josh Sackos)
+//	Modified to run Dungeon crawler from a 65 MHz clock 					
 //////////////////////////////////////////////////////////////////////////////////
 
 // ============================================================================== 
 // 										  Define Module
 // ==============================================================================
 module ClkDiv_5Hz(
-    CLK,											// 100MHz onbaord clock
+    CLK,											// 65MHz sysclk
     RST,											// Reset
     CLKOUT										// New clock output
     );
